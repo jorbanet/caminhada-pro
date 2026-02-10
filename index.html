@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#ec4899">
+    <title>Cardio Interval Pro</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        :root {
+            --primary: #ec4899;
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dark: #1f2937;
+            --light: #f3f4f6;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow-x: hidden;
+        }
+        
+        body.dark {
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+        }
+        
+        body.light {
+            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+            color: #1f2937;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 800;
+        }
+        
+        .header-icons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .icon-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .icon-btn:active {
+            transform: scale(0.9);
+        }
+        
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .nav-tab {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: transparent;
+            color: white;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        body.light .nav-tab {
+            color: #1f2937;
+        }
+        
+        .nav-tab.active {
+            background: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Screens */
+        .screen {
+            display: none;
+        }
+        
+        .screen.active {
+            display: block;
+        }
+        
+        /* Workout Screen */
+        .main-display {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .main-display::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            transition: all 0.3s;
+        }
+        
+        .main-display.warmup::before { background: #f59e0b; }
+        .main-display.high::before { background: #ef4444; }
+        .main-display.low::before { background: #10b981; }
+        .main-display.cooldown::before { background: #3b82f6; }
+        
+        .phase-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .phase-label {
+            font-size: 16px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 15px;
+            opacity: 0.9;
+        }
+        
+        .timer {
+            font-size: 64px;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 15px;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .progress-ring {
+            width: 200px;
+            height: 200px;
+            margin: 20px auto;
+            position: relative;
+        }
+        
+        .progress-ring svg {
+            transform: rotate(-90deg);
+        }
+        
+        .progress-ring circle {
+            fill: none;
+            stroke-width: 8;
+        }
+        
+        .progress-ring .bg {
+            stroke: rgba(255, 255, 255, 0.2);
+        }
+        
+        .progress-ring .progress {
+            stroke: var(--primary);
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.3s;
+        }
+        
+        .next-phase {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary);
+        }
+        
+        .stat-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .stat-unit {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-left: 3px;
+        }
+        
+        /* Heart Rate Zone */
+        .hr-zone {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .hr-display {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .heart-icon {
+            font-size: 36px;
+            animation: heartbeat 1s infinite;
+        }
+        
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            25% { transform: scale(1.2); }
+            50% { transform: scale(1); }
+        }
+        
+        .hr-value {
+            font-size: 48px;
+            font-weight: 800;
+        }
+        
+        .hr-zone-bar {
+            height: 30px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .hr-zone-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        .zone-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 11px;
+            opacity: 0.8;
+        }
+        
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 16px;
+            border: none;
+            border-radius: 15px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn:active {
+            transform: scale(0.95);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Workout Profiles */
+        .profile-grid {
+            display: grid;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .profile-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        
+        .profile-card:active {
+            transform: scale(0.98);
+        }
+        
+        .profile-card.selected {
+            border-color: var(--primary);
+            background: rgba(236, 72, 153, 0.2);
+        }
+        
+        .profile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .profile-name {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        .profile-badge {
+            padding: 4px 10px;
+            background: var(--primary);
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .profile-details {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            font-size: 13px;
+            opacity: 0.9;
+        }
+        
+        .profile-detail {
+            text-align: center;
+        }
+        
+        .profile-detail-value {
+            font-weight: 700;
+            font-size: 16px;
+        }
+        
+        /* History */
+        .history-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .history-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+        }
+        
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .history-date {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .history-duration {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .history-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        .history-stat-value {
+            font-weight: 700;
+            font-size: 16px;
+            display: block;
+        }
+        
+        /* Settings */
+        .settings-section {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .settings-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .setting-item {
+            margin-bottom: 20px;
+        }
+        
+        .setting-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .setting-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        input[type="number"],
+        input[type="text"],
+        select {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        body.light input[type="number"],
+        body.light input[type="text"],
+        body.light select {
+            background: rgba(0, 0, 0, 0.05);
+            color: #1f2937;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .toggle-switch {
+            position: relative;
+            width: 60px;
+            height: 30px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.3);
+            transition: 0.3s;
+            border-radius: 30px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: var(--primary);
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(30px);
+        }
+        
+        /* Charts */
+        .chart-container {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            height: 250px;
+        }
+        
+        /* Achievements */
+        .achievements-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        
+        .achievement {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        
+        .achievement.unlocked {
+            background: rgba(236, 72, 153, 0.3);
+            transform: scale(1.05);
+        }
+        
+        .achievement-icon {
+            font-size: 36px;
+            margin-bottom: 10px;
+            filter: grayscale(100%);
+        }
+        
+        .achievement.unlocked .achievement-icon {
+            filter: none;
+        }
+        
+        .achievement-name {
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.show {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 400px;
+            margin: 20px;
+            color: #1f2937;
+        }
+        
+        body.dark .modal-content {
+            background: rgba(31, 41, 55, 0.95);
+            color: white;
+        }
+        
+        .modal-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            opacity: 0.7;
+        }
+        
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <span style="font-size: 32px;">❤️</span>
+                <h1>Cardio Interval Pro</h1>
+            </div>
+            <div class="header-icons">
+                <button class="icon-btn" onclick="toggleTheme()">🌓</button>
+                <button class="icon-btn" onclick="showAchievements()">🏆</button>
+            </div>
+        </header>
+        
+        <nav class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('workout')">Treino</button>
+            <button class="nav-tab" onclick="switchTab('profiles')">Perfis</button>
+            <button class="nav-tab" onclick="switchTab('history')">Histórico</button>
+            <button class="nav-tab" onclick="switchTab('settings')">Config</button>
+        </nav>
+        
+        <!-- WORKOUT SCREEN -->
+        <div id="workoutScreen" class="screen active">
+            <div class="main-display" id="mainDisplay">
+                <div class="phase-icon" id="phaseIcon">🏃‍♂️</div>
+                <div class="phase-label" id="phaseLabel">PRONTO PARA COMEÇAR</div>
+                <div class="timer" id="timer">0:00</div>
+                <div class="next-phase" id="nextPhase">Selecione um perfil e pressione Iniciar</div>
+            </div>
+            
+            <div class="hr-zone">
+                <div class="hr-display">
+                    <div class="heart-icon">❤️</div>
+                    <div>
+                        <div class="hr-value" id="hrValue">--</div>
+                        <div style="font-size: 12px; opacity: 0.8;">BPM</div>
+                    </div>
+                </div>
+                <div class="hr-zone-bar">
+                    <div class="hr-zone-fill" id="hrZoneFill"></div>
+                </div>
+                <div class="zone-labels">
+                    <span>Leve</span>
+                    <span>Moderado</span>
+                    <span>Intenso</span>
+                </div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">🔥</div>
+                    <div class="stat-label">Calorias</div>
+                    <div class="stat-value" id="calories">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📏</div>
+                    <div class="stat-label">Distância</div>
+                    <div class="stat-value" id="distance">0.0<span class="stat-unit">km</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔄</div>
+                    <div class="stat-label">Ciclos</div>
+                    <div class="stat-value" id="cycles">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-label">Tempo Total</div>
+                    <div class="stat-value" id="totalTime">0:00</div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn btn-success" id="startBtn" onclick="startWorkout()">
+                    ▶️ Iniciar
+                </button>
+                <button class="btn btn-warning" id="pauseBtn" onclick="pauseWorkout()" disabled>
+                    ⏸️ Pausar
+                </button>
+                <button class="btn btn-danger" id="stopBtn" onclick="stopWorkout()" disabled>
+                    ⏹️ Parar
+                </button>
+            </div>
+        </div>
+        
+        <!-- PROFILES SCREEN -->
+        <div id="profilesScreen" class="screen">
+            <div class="profile-grid" id="profileGrid"></div>
+            <button class="btn btn-primary" onclick="createCustomProfile()">
+                ➕ Criar Perfil Personalizado
+            </button>
+        </div>
+        
+        <!-- HISTORY SCREEN -->
+        <div id="historyScreen" class="screen">
+            <div class="chart-container" id="chartContainer">
+                <canvas id="progressChart"></canvas>
+            </div>
+            <div class="history-list" id="historyList"></div>
+        </div>
+        
+        <!-- SETTINGS SCREEN -->
+        <div id="settingsScreen" class="screen">
+            <div class="settings-section">
+                <div class="settings-title">⚙️ Configurações Gerais</div>
+                
+                <div class="setting-item">
+                    <label class="setting-label">Peso (kg)</label>
+                    <input type="number" id="userWeight" value="70" min="30" max="200">
+                </div>
+                
+                <div class="setting-item">
+                    <label class="setting-label">Idade</label>
+                    <input type="number" id="userAge" value="30" min="15" max="100">
+                </div>
+                
+                <div class="setting-item">
+                    <label class="setting-label">FC Máxima (BPM)</label>
+                    <input type="number" id="maxHR" value="190" min="120" max="220">
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title">🔔 Notificações</div>
+                
+                <div class="setting-item">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label class="setting-label" style="margin: 0;">Avisos Sonoros</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="soundEnabled" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="setting-item">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label class="setting-label" style="margin: 0;">Vibração</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="vibrationEnabled" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="setting-item">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label class="setting-label" style="margin: 0;">Mensagens Motivacionais</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="motivationalEnabled" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="setting-item">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label class="setting-label" style="margin: 0;">Rastreamento GPS</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="gpsEnabled" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <button class="btn btn-primary" onclick="saveSettings()">💾 Salvar Configurações</button>
+            <button class="btn btn-danger" onclick="clearAllData()" style="margin-top: 10px;">🗑️ Limpar Todos os Dados</button>
+        </div>
+    </div>
+    
+    <!-- Achievements Modal -->
+    <div class="modal" id="achievementsModal">
+        <div class="modal-content">
+            <div class="modal-title">🏆 Conquistas</div>
+            <div class="achievements-grid" id="achievementsGrid"></div>
+            <button class="btn btn-primary" onclick="closeAchievements()" style="margin-top: 20px;">Fechar</button>
+        </div>
+    </div>
+    
+    <!-- Custom Profile Modal -->
+    <div class="modal" id="customProfileModal">
+        <div class="modal-content">
+            <div class="modal-title">➕ Criar Perfil</div>
+            <div class="setting-item">
+                <label class="setting-label">Nome do Perfil</label>
+                <input type="text" id="customName" placeholder="Ex: HIIT Intenso">
+            </div>
+            <div class="setting-item">
+                <label class="setting-label">Aquecimento (min)</label>
+                <input type="number" id="customWarmup" value="2" min="0" max="10">
+            </div>
+            <div class="setting-item">
+                <label class="setting-label">Alta Intensidade (seg)</label>
+                <input type="number" id="customHigh" value="30" min="10" max="300">
+            </div>
+            <div class="setting-item">
+                <label class="setting-label">Baixa Intensidade (seg)</label>
+                <input type="number" id="customLow" value="60" min="10" max="300">
+            </div>
+            <div class="setting-item">
+                <label class="setting-label">Número de Ciclos</label>
+                <input type="number" id="customCycles" value="8" min="1" max="20">
+            </div>
+            <div class="setting-item">
+                <label class="setting-label">Arrefecimento (min)</label>
+                <input type="number" id="customCooldown" value="2" min="0" max="10">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-success" onclick="saveCustomProfile()">Salvar</button>
+                <button class="btn btn-danger" onclick="closeCustomProfile()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+    <script src="charts.js"></script>
+</body>
+</html>

@@ -1,0 +1,855 @@
+// Estado global da aplicação
+let state = {
+    isRunning: false,
+    isPaused: false,
+    currentPhase: null,
+    phaseTimeRemaining: 0,
+    totalTimeElapsed: 0,
+    cyclesCompleted: 0,
+    currentProfile: null,
+    currentCycle: 0,
+    calories: 0,
+    distance: 0,
+    avgSpeed: 0,
+    heartRate: 0,
+    gpsEnabled: true,
+    lastPosition: null,
+    settings: {
+        weight: 70,
+        age: 30,
+        maxHR: 190,
+        soundEnabled: true,
+        vibrationEnabled: true,
+        motivationalEnabled: true,
+        gpsEnabled: true,
+        theme: 'default'
+    }
+};
+
+// Perfis de treino pré-definidos
+const defaultProfiles = [
+    {
+        id: 'beginner',
+        name: 'Iniciante',
+        level: 'Fácil',
+        warmup: 3 * 60,
+        high: 30,
+        low: 90,
+        cycles: 6,
+        cooldown: 3 * 60,
+        targetHR: '60-70%'
+    },
+    {
+        id: 'intermediate',
+        name: 'Intermediário',
+        level: 'Médio',
+        warmup: 2 * 60,
+        high: 45,
+        low: 75,
+        cycles: 8,
+        cooldown: 2 * 60,
+        targetHR: '70-80%'
+    },
+    {
+        id: 'advanced',
+        name: 'Avançado',
+        level: 'Difícil',
+        warmup: 2 * 60,
+        high: 60,
+        low: 60,
+        cycles: 10,
+        cooldown: 2 * 60,
+        targetHR: '80-90%'
+    },
+    {
+        id: 'hiit',
+        name: 'HIIT Extremo',
+        level: 'Muito Difícil',
+        warmup: 2 * 60,
+        high: 20,
+        low: 40,
+        cycles: 12,
+        cooldown: 3 * 60,
+        targetHR: '85-95%'
+    },
+    {
+        id: 'endurance',
+        name: 'Resistência',
+        level: 'Longo',
+        warmup: 5 * 60,
+        high: 180,
+        low: 120,
+        cycles: 5,
+        cooldown: 5 * 60,
+        targetHR: '65-75%'
+    },
+    {
+        id: 'fatburn',
+        name: 'Queima Gordura',
+        level: 'Moderado',
+        warmup: 3 * 60,
+        high: 90,
+        low: 90,
+        cycles: 8,
+        cooldown: 3 * 60,
+        targetHR: '60-75%'
+    }
+];
+
+// Conquistas
+const achievements = [
+    { id: 'first', icon: '🎯', name: 'Primeiro Treino', condition: 'workouts', value: 1 },
+    { id: 'week', icon: '📅', name: '7 Dias', condition: 'workouts', value: 7 },
+    { id: 'month', icon: '🗓️', name: '30 Dias', condition: 'workouts', value: 30 },
+    { id: 'distance', icon: '🏃', name: '10km Total', condition: 'distance', value: 10 },
+    { id: 'calories', icon: '🔥', name: '1000 Cal', condition: 'calories', value: 1000 },
+    { id: 'time', icon: '⏱️', name: '5h Total', condition: 'time', value: 300 },
+    { id: 'streak', icon: '⚡', name: '7 Dias Seguidos', condition: 'streak', value: 7 },
+    { id: 'cycles', icon: '🔄', name: '100 Ciclos', condition: 'cycles', value: 100 },
+    { id: 'warrior', icon: '💪', name: 'Guerreiro', condition: 'workouts', value: 50 }
+];
+
+// Mensagens motivacionais
+const motivationalMessages = [
+    "💪 Você consegue!",
+    "🔥 Mantenha o ritmo!",
+    "⚡ Energia máxima!",
+    "🎯 Foco no objetivo!",
+    "💯 Está indo muito bem!",
+    "🚀 Vamos lá!",
+    "⭐ Excelente trabalho!",
+    "🏆 Campeão!",
+    "✨ Supere seus limites!",
+    "💥 Dê tudo de si!"
+];
+
+let intervalId = null;
+let gpsWatchId = null;
+let wakeLock = null;
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    loadSettings();
+    loadProfiles();
+    loadHistory();
+    renderProfiles();
+    updateAchievements();
+    initGPS();
+});
+
+// === FUNÇÕES DE ARMAZENAMENTO ===
+
+function loadSettings() {
+    const saved = localStorage.getItem('cardioSettings');
+    if (saved) {
+        state.settings = { ...state.settings, ...JSON.parse(saved) };
+        
+        document.getElementById('userWeight').value = state.settings.weight;
+        document.getElementById('userAge').value = state.settings.age;
+        document.getElementById('maxHR').value = state.settings.maxHR;
+        document.getElementById('soundEnabled').checked = state.settings.soundEnabled;
+        document.getElementById('vibrationEnabled').checked = state.settings.vibrationEnabled;
+        document.getElementById('motivationalEnabled').checked = state.settings.motivationalEnabled;
+        document.getElementById('gpsEnabled').checked = state.settings.gpsEnabled;
+        
+        if (state.settings.theme === 'dark') {
+            document.body.classList.add('dark');
+        } else if (state.settings.theme === 'light') {
+            document.body.classList.add('light');
+        }
+    }
+}
+
+function saveSettings() {
+    state.settings.weight = parseInt(document.getElementById('userWeight').value);
+    state.settings.age = parseInt(document.getElementById('userAge').value);
+    state.settings.maxHR = parseInt(document.getElementById('maxHR').value);
+    state.settings.soundEnabled = document.getElementById('soundEnabled').checked;
+    state.settings.vibrationEnabled = document.getElementById('vibrationEnabled').checked;
+    state.settings.motivationalEnabled = document.getElementById('motivationalEnabled').checked;
+    state.settings.gpsEnabled = document.getElementById('gpsEnabled').checked;
+    
+    localStorage.setItem('cardioSettings', JSON.stringify(state.settings));
+    
+    showNotification('✅ Configurações salvas!');
+    
+    if (state.settings.gpsEnabled && !gpsWatchId) {
+        initGPS();
+    } else if (!state.settings.gpsEnabled && gpsWatchId) {
+        stopGPS();
+    }
+}
+
+function loadProfiles() {
+    const saved = localStorage.getItem('customProfiles');
+    if (saved) {
+        const custom = JSON.parse(saved);
+        defaultProfiles.push(...custom);
+    }
+}
+
+function saveProfile(profile) {
+    const saved = localStorage.getItem('customProfiles');
+    const custom = saved ? JSON.parse(saved) : [];
+    custom.push(profile);
+    localStorage.setItem('customProfiles', JSON.stringify(custom));
+}
+
+function loadHistory() {
+    const saved = localStorage.getItem('workoutHistory');
+    return saved ? JSON.parse(saved) : [];
+}
+
+function saveWorkout(workout) {
+    const history = loadHistory();
+    history.unshift(workout);
+    
+    // Manter apenas últimos 50 treinos
+    if (history.length > 50) {
+        history.pop();
+    }
+    
+    localStorage.setItem('workoutHistory', JSON.stringify(history));
+    updateAchievements();
+}
+
+// === INTERFACE ===
+
+function switchTab(tab) {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    
+    event.target.classList.add('active');
+    
+    if (tab === 'workout') {
+        document.getElementById('workoutScreen').classList.add('active');
+    } else if (tab === 'profiles') {
+        document.getElementById('profilesScreen').classList.add('active');
+        renderProfiles();
+    } else if (tab === 'history') {
+        document.getElementById('historyScreen').classList.add('active');
+        renderHistory();
+    } else if (tab === 'settings') {
+        document.getElementById('settingsScreen').classList.add('active');
+    }
+}
+
+function toggleTheme() {
+    if (document.body.classList.contains('dark')) {
+        document.body.classList.remove('dark');
+        document.body.classList.add('light');
+        state.settings.theme = 'light';
+    } else if (document.body.classList.contains('light')) {
+        document.body.classList.remove('light');
+        state.settings.theme = 'default';
+    } else {
+        document.body.classList.add('dark');
+        state.settings.theme = 'dark';
+    }
+    
+    localStorage.setItem('cardioSettings', JSON.stringify(state.settings));
+}
+
+function showNotification(message) {
+    const existingNotif = document.querySelector('.notification');
+    if (existingNotif) {
+        existingNotif.remove();
+    }
+    
+    const notif = document.createElement('div');
+    notif.className = 'notification';
+    notif.textContent = message;
+    notif.style.cssText = `
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(16, 185, 129, 0.95);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 10px;
+        font-weight: 600;
+        z-index: 2000;
+        animation: slideDown 0.3s ease;
+    `;
+    
+    document.body.appendChild(notif);
+    setTimeout(() => notif.remove(), 3000);
+}
+
+// === PERFIS ===
+
+function renderProfiles() {
+    const grid = document.getElementById('profileGrid');
+    grid.innerHTML = '';
+    
+    defaultProfiles.forEach(profile => {
+        const totalTime = profile.warmup + (profile.high + profile.low) * profile.cycles + profile.cooldown;
+        const card = document.createElement('div');
+        card.className = 'profile-card';
+        if (state.currentProfile?.id === profile.id) {
+            card.classList.add('selected');
+        }
+        
+        card.innerHTML = `
+            <div class="profile-header">
+                <div class="profile-name">${profile.name}</div>
+                <div class="profile-badge">${profile.level}</div>
+            </div>
+            <div class="profile-details">
+                <div class="profile-detail">
+                    <div class="profile-detail-value">${profile.cycles}</div>
+                    <div>Ciclos</div>
+                </div>
+                <div class="profile-detail">
+                    <div class="profile-detail-value">${Math.floor(totalTime / 60)}'</div>
+                    <div>Duração</div>
+                </div>
+                <div class="profile-detail">
+                    <div class="profile-detail-value">${profile.targetHR}</div>
+                    <div>FC Alvo</div>
+                </div>
+            </div>
+        `;
+        
+        card.onclick = () => selectProfile(profile);
+        grid.appendChild(card);
+    });
+}
+
+function selectProfile(profile) {
+    state.currentProfile = profile;
+    renderProfiles();
+    showNotification(`✅ Perfil "${profile.name}" selecionado`);
+}
+
+function createCustomProfile() {
+    document.getElementById('customProfileModal').classList.add('show');
+}
+
+function closeCustomProfile() {
+    document.getElementById('customProfileModal').classList.remove('show');
+}
+
+function saveCustomProfile() {
+    const name = document.getElementById('customName').value;
+    if (!name) {
+        alert('Digite um nome para o perfil');
+        return;
+    }
+    
+    const profile = {
+        id: 'custom_' + Date.now(),
+        name: name,
+        level: 'Personalizado',
+        warmup: parseInt(document.getElementById('customWarmup').value) * 60,
+        high: parseInt(document.getElementById('customHigh').value),
+        low: parseInt(document.getElementById('customLow').value),
+        cycles: parseInt(document.getElementById('customCycles').value),
+        cooldown: parseInt(document.getElementById('customCooldown').value) * 60,
+        targetHR: 'Personalizado'
+    };
+    
+    saveProfile(profile);
+    defaultProfiles.push(profile);
+    renderProfiles();
+    closeCustomProfile();
+    showNotification('✅ Perfil criado com sucesso!');
+}
+
+// === TREINO ===
+
+function startWorkout() {
+    if (!state.currentProfile) {
+        showNotification('⚠️ Selecione um perfil primeiro!');
+        switchTab('profiles');
+        document.getElementById('profilesScreen').classList.add('active');
+        return;
+    }
+    
+    if (state.isPaused) {
+        state.isPaused = false;
+    } else {
+        // Novo treino
+        state.currentPhase = 'warmup';
+        state.phaseTimeRemaining = state.currentProfile.warmup;
+        state.totalTimeElapsed = 0;
+        state.cyclesCompleted = 0;
+        state.currentCycle = 0;
+        state.calories = 0;
+        state.distance = 0;
+        state.lastPosition = null;
+    }
+    
+    state.isRunning = true;
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = false;
+    
+    updateDisplay();
+    playSound(600, 200);
+    vibrate([200]);
+    
+    if (state.settings.gpsEnabled) {
+        startGPS();
+    }
+    
+    requestWakeLock();
+    intervalId = setInterval(tick, 1000);
+}
+
+function pauseWorkout() {
+    state.isPaused = true;
+    state.isRunning = false;
+    clearInterval(intervalId);
+    
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('startBtn').innerHTML = '▶️ Retomar';
+    
+    document.getElementById('phaseLabel').textContent = '⏸️ PAUSADO';
+    
+    stopGPS();
+    releaseWakeLock();
+}
+
+function stopWorkout() {
+    const wasRunning = state.isRunning || state.isPaused;
+    
+    state.isRunning = false;
+    state.isPaused = false;
+    clearInterval(intervalId);
+    
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = true;
+    document.getElementById('startBtn').innerHTML = '▶️ Iniciar';
+    
+    document.getElementById('mainDisplay').className = 'main-display';
+    document.getElementById('phaseIcon').textContent = '🏃‍♂️';
+    document.getElementById('phaseLabel').textContent = 'PRONTO PARA COMEÇAR';
+    document.getElementById('timer').textContent = '0:00';
+    document.getElementById('nextPhase').textContent = 'Selecione um perfil e pressione Iniciar';
+    
+    stopGPS();
+    releaseWakeLock();
+    
+    // Salvar treino se foi significativo
+    if (wasRunning && state.totalTimeElapsed > 60) {
+        saveWorkout({
+            date: new Date().toISOString(),
+            profile: state.currentProfile.name,
+            duration: state.totalTimeElapsed,
+            cycles: state.cyclesCompleted,
+            calories: Math.round(state.calories),
+            distance: parseFloat(state.distance.toFixed(2)),
+            avgHR: state.heartRate || 0
+        });
+        
+        showNotification('✅ Treino salvo!');
+    }
+}
+
+function tick() {
+    if (!state.isRunning) return;
+    
+    state.phaseTimeRemaining--;
+    state.totalTimeElapsed++;
+    
+    // Calcular calorias (MET aproximado)
+    const met = state.currentPhase === 'high' ? 8.0 : (state.currentPhase === 'low' ? 5.0 : 3.5);
+    state.calories += (met * state.settings.weight * (1/3600));
+    
+    // Simular frequência cardíaca se não houver monitor
+    if (!state.heartRate) {
+        const maxHR = state.settings.maxHR;
+        if (state.currentPhase === 'warmup') {
+            state.heartRate = Math.floor(maxHR * 0.6 + Math.random() * 10);
+        } else if (state.currentPhase === 'high') {
+            state.heartRate = Math.floor(maxHR * 0.85 + Math.random() * 15);
+        } else if (state.currentPhase === 'low') {
+            state.heartRate = Math.floor(maxHR * 0.65 + Math.random() * 10);
+        } else if (state.currentPhase === 'cooldown') {
+            state.heartRate = Math.floor(maxHR * 0.55 + Math.random() * 10);
+        }
+    }
+    
+    // Alertas
+    if (state.phaseTimeRemaining === 3 || state.phaseTimeRemaining === 2 || state.phaseTimeRemaining === 1) {
+        playSound(700, 100);
+        vibrate([100]);
+    }
+    
+    // Mensagem motivacional aleatória
+    if (state.settings.motivationalEnabled && state.totalTimeElapsed % 60 === 0 && Math.random() < 0.3) {
+        const msg = motivationalMessages[Math.floor(Math.random() * motivationalMessages.length)];
+        showNotification(msg);
+    }
+    
+    // Mudança de fase
+    if (state.phaseTimeRemaining <= 0) {
+        changePhase();
+    }
+    
+    updateDisplay();
+}
+
+function changePhase() {
+    const profile = state.currentProfile;
+    
+    if (state.currentPhase === 'warmup') {
+        state.currentPhase = 'high';
+        state.phaseTimeRemaining = profile.high;
+        playSound(900, 300);
+        vibrate([300, 100, 300]);
+    } else if (state.currentPhase === 'high') {
+        state.currentPhase = 'low';
+        state.phaseTimeRemaining = profile.low;
+        playSound(600, 300);
+        vibrate([300]);
+    } else if (state.currentPhase === 'low') {
+        state.currentCycle++;
+        
+        if (state.currentCycle < profile.cycles) {
+            state.currentPhase = 'high';
+            state.phaseTimeRemaining = profile.high;
+            state.cyclesCompleted++;
+            playSound(900, 300);
+            vibrate([300, 100, 300]);
+        } else {
+            state.currentPhase = 'cooldown';
+            state.phaseTimeRemaining = profile.cooldown;
+            state.cyclesCompleted++;
+            playSound(600, 400);
+            vibrate([400]);
+        }
+    } else if (state.currentPhase === 'cooldown') {
+        // Treino completo
+        playSound(800, 500);
+        vibrate([500, 200, 500]);
+        showNotification('🎉 Treino concluído! Parabéns!');
+        stopWorkout();
+    }
+}
+
+function updateDisplay() {
+    const icons = {
+        warmup: '🔥',
+        high: '⚡',
+        low: '✅',
+        cooldown: '❄️'
+    };
+    
+    const labels = {
+        warmup: 'AQUECIMENTO',
+        high: 'ALTA INTENSIDADE',
+        low: 'BAIXA INTENSIDADE',
+        cooldown: 'ARREFECIMENTO'
+    };
+    
+    document.getElementById('phaseIcon').textContent = icons[state.currentPhase] || '🏃‍♂️';
+    document.getElementById('phaseLabel').textContent = labels[state.currentPhase] || 'PRONTO';
+    document.getElementById('timer').textContent = formatTime(state.phaseTimeRemaining);
+    document.getElementById('totalTime').textContent = formatTime(state.totalTimeElapsed);
+    document.getElementById('cycles').textContent = state.cyclesCompleted;
+    document.getElementById('calories').textContent = Math.round(state.calories);
+    document.getElementById('distance').innerHTML = state.distance.toFixed(2) + '<span class="stat-unit">km</span>';
+    document.getElementById('hrValue').textContent = state.heartRate || '--';
+    
+    // Atualizar classe do display
+    const display = document.getElementById('mainDisplay');
+    display.className = 'main-display ' + (state.currentPhase || '');
+    
+    // Zona de FC
+    const hrPercent = state.heartRate ? (state.heartRate / state.settings.maxHR) * 100 : 0;
+    document.getElementById('hrZoneFill').style.width = Math.min(hrPercent, 100) + '%';
+    
+    // Próxima fase
+    if (state.currentPhase === 'warmup') {
+        document.getElementById('nextPhase').textContent = `Próximo: ${state.currentProfile.high}s alta intensidade`;
+    } else if (state.currentPhase === 'high') {
+        document.getElementById('nextPhase').textContent = `Próximo: ${state.currentProfile.low}s baixa intensidade`;
+    } else if (state.currentPhase === 'low') {
+        if (state.currentCycle < state.currentProfile.cycles - 1) {
+            document.getElementById('nextPhase').textContent = `Ciclo ${state.currentCycle + 1}/${state.currentProfile.cycles}`;
+        } else {
+            document.getElementById('nextPhase').textContent = 'Próximo: Arrefecimento';
+        }
+    } else if (state.currentPhase === 'cooldown') {
+        document.getElementById('nextPhase').textContent = 'Quase lá! Continue...';
+    }
+}
+
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// === HISTÓRICO ===
+
+function renderHistory() {
+    const history = loadHistory();
+    const list = document.getElementById('historyList');
+    
+    if (history.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">📊</div>
+                <div>Nenhum treino registrado ainda</div>
+            </div>
+        `;
+        return;
+    }
+    
+    list.innerHTML = '';
+    history.slice(0, 20).forEach(workout => {
+        const date = new Date(workout.date);
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        card.innerHTML = `
+            <div class="history-header">
+                <div class="history-date">
+                    ${date.toLocaleDateString('pt-PT')} às ${date.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+                <div class="history-duration">${formatTime(workout.duration)}</div>
+            </div>
+            <div style="margin-bottom: 10px; opacity: 0.8;">${workout.profile}</div>
+            <div class="history-stats">
+                <div>
+                    <span class="history-stat-value">🔄 ${workout.cycles}</span>
+                    <div>Ciclos</div>
+                </div>
+                <div>
+                    <span class="history-stat-value">🔥 ${workout.calories}</span>
+                    <div>Calorias</div>
+                </div>
+                <div>
+                    <span class="history-stat-value">📏 ${workout.distance}</span>
+                    <div>km</div>
+                </div>
+                <div>
+                    <span class="history-stat-value">❤️ ${workout.avgHR || '--'}</span>
+                    <div>BPM</div>
+                </div>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+    
+    renderChart();
+}
+
+// === GPS ===
+
+function initGPS() {
+    if (!state.settings.gpsEnabled || !navigator.geolocation) {
+        return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+        position => {
+            state.lastPosition = position;
+        },
+        error => {
+            console.log('GPS não disponível:', error);
+        }
+    );
+}
+
+function startGPS() {
+    if (!state.settings.gpsEnabled || !navigator.geolocation) {
+        return;
+    }
+    
+    gpsWatchId = navigator.geolocation.watchPosition(
+        position => {
+            if (state.lastPosition) {
+                const distance = calculateDistance(
+                    state.lastPosition.coords.latitude,
+                    state.lastPosition.coords.longitude,
+                    position.coords.latitude,
+                    position.coords.longitude
+                );
+                state.distance += distance;
+            }
+            state.lastPosition = position;
+        },
+        error => {
+            console.log('Erro GPS:', error);
+        },
+        { enableHighAccuracy: true, maximumAge: 0 }
+    );
+}
+
+function stopGPS() {
+    if (gpsWatchId) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = null;
+    }
+}
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Raio da Terra em km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// === CONQUISTAS ===
+
+function updateAchievements() {
+    const history = loadHistory();
+    const stats = calculateStats(history);
+    
+    achievements.forEach(achievement => {
+        const unlocked = checkAchievement(achievement, stats);
+        const saved = localStorage.getItem('achievements') || '[]';
+        const unlockedList = JSON.parse(saved);
+        
+        if (unlocked && !unlockedList.includes(achievement.id)) {
+            unlockedList.push(achievement.id);
+            localStorage.setItem('achievements', JSON.stringify(unlockedList));
+            showNotification(`🏆 Nova conquista: ${achievement.name}!`);
+        }
+    });
+}
+
+function checkAchievement(achievement, stats) {
+    switch (achievement.condition) {
+        case 'workouts':
+            return stats.totalWorkouts >= achievement.value;
+        case 'distance':
+            return stats.totalDistance >= achievement.value;
+        case 'calories':
+            return stats.totalCalories >= achievement.value;
+        case 'time':
+            return stats.totalTime >= achievement.value * 60;
+        case 'cycles':
+            return stats.totalCycles >= achievement.value;
+        default:
+            return false;
+    }
+}
+
+function calculateStats(history) {
+    return {
+        totalWorkouts: history.length,
+        totalDistance: history.reduce((sum, w) => sum + (w.distance || 0), 0),
+        totalCalories: history.reduce((sum, w) => sum + (w.calories || 0), 0),
+        totalTime: history.reduce((sum, w) => sum + (w.duration || 0), 0),
+        totalCycles: history.reduce((sum, w) => sum + (w.cycles || 0), 0)
+    };
+}
+
+function showAchievements() {
+    const grid = document.getElementById('achievementsGrid');
+    const unlockedList = JSON.parse(localStorage.getItem('achievements') || '[]');
+    
+    grid.innerHTML = '';
+    achievements.forEach(achievement => {
+        const div = document.createElement('div');
+        div.className = 'achievement';
+        if (unlockedList.includes(achievement.id)) {
+            div.classList.add('unlocked');
+        }
+        div.innerHTML = `
+            <div class="achievement-icon">${achievement.icon}</div>
+            <div class="achievement-name">${achievement.name}</div>
+        `;
+        grid.appendChild(div);
+    });
+    
+    document.getElementById('achievementsModal').classList.add('show');
+}
+
+function closeAchievements() {
+    document.getElementById('achievementsModal').classList.remove('show');
+}
+
+// === SONS E VIBRAÇÃO ===
+
+function playSound(frequency = 800, duration = 200) {
+    if (!state.settings.soundEnabled) return;
+    
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = frequency;
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + duration / 1000);
+    } catch (e) {
+        console.log('Som não disponível');
+    }
+}
+
+function vibrate(pattern = [200]) {
+    if (!state.settings.vibrationEnabled) return;
+    if ('vibrate' in navigator) {
+        navigator.vibrate(pattern);
+    }
+}
+
+// === WAKE LOCK ===
+
+async function requestWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+        }
+    } catch (err) {
+        console.log('Wake Lock não disponível');
+    }
+}
+
+async function releaseWakeLock() {
+    if (wakeLock !== null) {
+        await wakeLock.release();
+        wakeLock = null;
+    }
+}
+
+// === UTILIDADES ===
+
+function clearAllData() {
+    if (confirm('Tem certeza que deseja apagar TODOS os dados? Esta ação não pode ser desfeita.')) {
+        localStorage.clear();
+        showNotification('✅ Todos os dados foram apagados');
+        setTimeout(() => location.reload(), 1500);
+    }
+}
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+}
+
+// Prevenir zoom
+document.addEventListener('touchmove', function (event) {
+    if (event.scale !== 1) {
+        event.preventDefault();
+    }
+}, { passive: false });
+
+let lastTouchEnd = 0;
+document.addEventListener('touchend', function (event) {
+    const now = (new Date()).getTime();
+    if (now - lastTouchEnd <= 300) {
+        event.preventDefault();
+    }
+    lastTouchEnd = now;
+}, false);
