@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -711,6 +712,7 @@
         <nav class="nav-tabs">
             <button class="nav-tab active" onclick="switchTab('workout')">Treino</button>
             <button class="nav-tab" onclick="switchTab('profiles')">Perfis</button>
+            <button class="nav-tab" onclick="switchTab('guide')">📚 Guia</button>
             <button class="nav-tab" onclick="switchTab('history')">Histórico</button>
             <button class="nav-tab" onclick="switchTab('settings')">Config</button>
         </nav>
@@ -752,6 +754,7 @@
                     <div class="stat-icon">📏</div>
                     <div class="stat-label">Distância</div>
                     <div class="stat-value" id="distance">0.0<span class="stat-unit">km</span></div>
+                    <div style="font-size: 9px; opacity: 0.7; margin-top: 3px;" id="gpsStatus">GPS: --</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">🔄</div>
@@ -784,6 +787,187 @@
             <button class="btn btn-primary" onclick="createCustomProfile()">
                 ➕ Criar Perfil Personalizado
             </button>
+        </div>
+        
+        <!-- GUIDE SCREEN -->
+        <div id="guideScreen" class="screen">
+            <div class="settings-section">
+                <div class="settings-title">❤️ O Que é Treino Cardio?</div>
+                <p style="line-height: 1.6; opacity: 0.9; margin-bottom: 15px;">
+                    <strong>Cardio</strong> (ou treino cardiovascular) é qualquer exercício que eleva a sua <strong>frequência cardíaca</strong> 
+                    e mantém-na elevada por um período prolongado. Fortalece o coração, melhora a circulação, 
+                    queima calorias e aumenta a resistência física.
+                </p>
+                
+                <div style="background: rgba(236, 72, 153, 0.2); padding: 15px; border-radius: 10px; margin-top: 15px;">
+                    <strong>💪 Benefícios do Cardio:</strong>
+                    <ul style="margin: 10px 0 0 20px; line-height: 1.8;">
+                        <li>🫀 Fortalece o coração</li>
+                        <li>🔥 Queima calorias e gordura</li>
+                        <li>💨 Melhora capacidade pulmonar</li>
+                        <li>⚡ Aumenta energia e resistência</li>
+                        <li>🧠 Reduz stress e ansiedade</li>
+                        <li>😴 Melhora qualidade do sono</li>
+                        <li>🩺 Controla pressão arterial</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title">📊 Zonas de Frequência Cardíaca</div>
+                <p style="line-height: 1.6; opacity: 0.9; margin-bottom: 15px;">
+                    A <strong>intensidade do treino</strong> é medida pela sua frequência cardíaca (FC). 
+                    Cada zona tem objetivos específicos:
+                </p>
+                
+                <div style="display: grid; gap: 15px;">
+                    <div style="background: rgba(16, 185, 129, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #10b981;">
+                        <strong>🟢 Zona 1: Muito Leve (50-60% FC Max)</strong><br>
+                        <span style="opacity: 0.9;">
+                            Recuperação ativa, aquecimento. Consegue conversar facilmente.<br>
+                            <em>Exemplo: Caminhada leve</em>
+                        </span>
+                    </div>
+                    
+                    <div style="background: rgba(34, 197, 94, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #22c55e;">
+                        <strong>🟢 Zona 2: Leve (60-70% FC Max)</strong><br>
+                        <span style="opacity: 0.9;">
+                            <strong>Queima de gordura</strong> máxima. Consegue falar frases completas.<br>
+                            <em>Use: Perfil "Queima Gordura"</em>
+                        </span>
+                    </div>
+                    
+                    <div style="background: rgba(59, 130, 246, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #3b82f6;">
+                        <strong>🔵 Zona 3: Moderado (70-80% FC Max)</strong><br>
+                        <span style="opacity: 0.9;">
+                            <strong>Melhora resistência</strong> cardiovascular. Fala com dificuldade.<br>
+                            <em>Use: Perfis "Iniciante" e "Intermediário"</em>
+                        </span>
+                    </div>
+                    
+                    <div style="background: rgba(245, 158, 11, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #f59e0b;">
+                        <strong>🟠 Zona 4: Difícil (80-90% FC Max)</strong><br>
+                        <span style="opacity: 0.9;">
+                            <strong>Limiar anaeróbico</strong>. Aumenta velocidade e potência. Muito difícil falar.<br>
+                            <em>Use: Perfil "Avançado"</em>
+                        </span>
+                    </div>
+                    
+                    <div style="background: rgba(239, 68, 68, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #ef4444;">
+                        <strong>🔴 Zona 5: Máximo (90-100% FC Max)</strong><br>
+                        <span style="opacity: 0.9;">
+                            <strong>Esforço máximo</strong>. Impossível manter por muito tempo. HIIT.<br>
+                            <em>Use: Perfil "HIIT Extremo"</em>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title">🎯 Qual Nível Escolher?</div>
+                
+                <div style="display: grid; gap: 15px;">
+                    <div style="background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 10px;">
+                        <strong>🌱 Se você está COMEÇANDO:</strong><br>
+                        <span style="opacity: 0.9;">
+                            → Use <strong>Zona 2-3 (60-70%)</strong><br>
+                            → Perfil: <strong>"Iniciante"</strong> ou <strong>"Queima Gordura"</strong><br>
+                            → Frequência: 3x por semana<br>
+                            → Objetivo: Criar hábito e resistência base
+                        </span>
+                    </div>
+                    
+                    <div style="background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 10px;">
+                        <strong>💪 Se você JÁ TREINA:</strong><br>
+                        <span style="opacity: 0.9;">
+                            → Use <strong>Zona 3-4 (70-85%)</strong><br>
+                            → Perfil: <strong>"Intermediário"</strong> ou <strong>"Avançado"</strong><br>
+                            → Frequência: 4-5x por semana<br>
+                            → Objetivo: Melhorar performance e resistência
+                        </span>
+                    </div>
+                    
+                    <div style="background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 10px;">
+                        <strong>🔥 Se você é ATLETA:</strong><br>
+                        <span style="opacity: 0.9;">
+                            → Use <strong>Zona 4-5 (85-95%)</strong><br>
+                            → Perfil: <strong>"HIIT Extremo"</strong> ou <strong>"Avançado"</strong><br>
+                            → Frequência: 5-6x por semana (com descanso!)<br>
+                            → Objetivo: Máxima performance e velocidade
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title">🧮 Calcular Sua FC Máxima</div>
+                <p style="opacity: 0.9; margin-bottom: 15px;">
+                    A fórmula mais comum é: <strong>FC Máxima = 220 - Idade</strong>
+                </p>
+                
+                <div style="background: rgba(236, 72, 153, 0.2); padding: 20px; border-radius: 10px;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: 600;">
+                        Sua Idade:
+                    </label>
+                    <input type="number" id="guideAge" value="30" min="15" max="100" 
+                           style="width: 100%; padding: 12px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.3); 
+                                  background: rgba(255,255,255,0.1); color: white; font-size: 18px; font-weight: 700;"
+                           onchange="calculateMaxHR()">
+                    
+                    <div id="hrResults" style="margin-top: 20px; line-height: 2;">
+                        <!-- Resultados aparecem aqui -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title">⚠️ Avisos Importantes</div>
+                <ul style="line-height: 1.8; opacity: 0.9; margin-left: 20px;">
+                    <li>✅ <strong>Consulte um médico</strong> antes de iniciar treinos intensos</li>
+                    <li>✅ Comece devagar e <strong>aumente gradualmente</strong></li>
+                    <li>✅ <strong>Hidrate-se</strong> sempre (antes, durante e depois)</li>
+                    <li>✅ <strong>Ouça seu corpo</strong> - pare se sentir tontura ou dor</li>
+                    <li>✅ <strong>Descanse</strong> - recuperação é essencial</li>
+                    <li>✅ Para perda de peso: <strong>Zona 2 (60-70%)</strong> + consistência</li>
+                    <li>✅ Para performance: Alterne <strong>Zona 4-5 com Zona 2</strong></li>
+                </ul>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title">📍 Como Funciona o GPS?</div>
+                <p style="line-height: 1.6; opacity: 0.9; margin-bottom: 15px;">
+                    O GPS permite rastrear a <strong>distância real</strong> que você percorre durante o treino.
+                </p>
+                
+                <div style="background: rgba(59, 130, 246, 0.2); padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                    <strong>📱 Para ativar o GPS:</strong>
+                    <ol style="margin: 10px 0 0 20px; line-height: 1.8;">
+                        <li>Vá em <strong>Configurações</strong></li>
+                        <li>Ative <strong>"Rastreamento GPS"</strong></li>
+                        <li>Permita acesso à localização quando solicitado</li>
+                        <li>Use <strong>ao ar livre</strong> para melhor sinal</li>
+                    </ol>
+                </div>
+                
+                <div style="background: rgba(245, 158, 11, 0.2); padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                    <strong>⚡ Dicas para GPS preciso:</strong>
+                    <ul style="margin: 10px 0 0 20px; line-height: 1.8;">
+                        <li>✅ Use em <strong>espaços abertos</strong> (parque, rua)</li>
+                        <li>✅ Aguarde alguns segundos antes de iniciar</li>
+                        <li>✅ Mantenha celular com você (não na mochila)</li>
+                        <li>❌ Não funciona bem em <strong>ambientes fechados</strong></li>
+                        <li>❌ Prédios altos podem interferir no sinal</li>
+                    </ul>
+                </div>
+                
+                <div style="background: rgba(239, 68, 68, 0.2); padding: 15px; border-radius: 10px;">
+                    <strong>🔋 Consumo de Bateria:</strong>
+                    <p style="margin-top: 10px; line-height: 1.6;">
+                        O GPS consome <strong>bateria extra</strong>. Se estiver em casa/ginásio ou não 
+                        precisa da distância, pode desativar nas Configurações para economizar energia.
+                    </p>
+                </div>
+            </div>
         </div>
         
         <!-- HISTORY SCREEN -->
