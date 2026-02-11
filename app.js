@@ -22,6 +22,7 @@ let state = {
         vibrationEnabled: true,
         motivationalEnabled: true,
         gpsEnabled: true,
+        voiceEnabled: true, // ← NOVA CONFIGURAÇÃO!
         theme: 'default'
     }
 };
@@ -152,6 +153,12 @@ function loadSettings() {
         document.getElementById('motivationalEnabled').checked = state.settings.motivationalEnabled;
         document.getElementById('gpsEnabled').checked = state.settings.gpsEnabled;
         
+        // Carregar configuração de voz (se existir)
+        const voiceCheckbox = document.getElementById('voiceEnabled');
+        if (voiceCheckbox) {
+            voiceCheckbox.checked = state.settings.voiceEnabled !== false;
+        }
+        
         if (state.settings.theme === 'dark') {
             document.body.classList.add('dark');
         } else if (state.settings.theme === 'light') {
@@ -168,6 +175,12 @@ function saveSettings() {
     state.settings.vibrationEnabled = document.getElementById('vibrationEnabled').checked;
     state.settings.motivationalEnabled = document.getElementById('motivationalEnabled').checked;
     state.settings.gpsEnabled = document.getElementById('gpsEnabled').checked;
+    
+    // Salvar configuração de voz
+    const voiceCheckbox = document.getElementById('voiceEnabled');
+    if (voiceCheckbox) {
+        state.settings.voiceEnabled = voiceCheckbox.checked;
+    }
     
     localStorage.setItem('cardioSettings', JSON.stringify(state.settings));
     
@@ -226,6 +239,9 @@ function switchTab(tab) {
     } else if (tab === 'profiles') {
         document.getElementById('profilesScreen').classList.add('active');
         renderProfiles();
+    } else if (tab === 'guide') {
+        document.getElementById('guideScreen').classList.add('active');
+        calculateMaxHR();
     } else if (tab === 'history') {
         document.getElementById('historyScreen').classList.add('active');
         renderHistory();
@@ -390,6 +406,11 @@ function startWorkout() {
     playSound(600, 200);
     vibrate([200]);
     
+    // Anunciar início
+    if (state.currentPhase === 'warmup') {
+        speak('Aquecimento'); // ← VOZ no início!
+    }
+    
     if (state.settings.gpsEnabled) {
         startGPS();
     }
@@ -460,18 +481,28 @@ function tick() {
     const met = state.currentPhase === 'high' ? 8.0 : (state.currentPhase === 'low' ? 5.0 : 3.5);
     state.calories += (met * state.settings.weight * (1/3600));
     
-    // Simular frequência cardíaca se não houver monitor
-    if (!state.heartRate) {
-        const maxHR = state.settings.maxHR;
-        if (state.currentPhase === 'warmup') {
-            state.heartRate = Math.floor(maxHR * 0.6 + Math.random() * 10);
-        } else if (state.currentPhase === 'high') {
-            state.heartRate = Math.floor(maxHR * 0.85 + Math.random() * 15);
-        } else if (state.currentPhase === 'low') {
-            state.heartRate = Math.floor(maxHR * 0.65 + Math.random() * 10);
-        } else if (state.currentPhase === 'cooldown') {
-            state.heartRate = Math.floor(maxHR * 0.55 + Math.random() * 10);
-        }
+    // Simular frequência cardíaca (atualiza a cada segundo com transição suave)
+    const maxHR = state.settings.maxHR;
+    let targetHR;
+    
+    if (state.currentPhase === 'warmup') {
+        targetHR = maxHR * 0.6 + Math.random() * 10;
+    } else if (state.currentPhase === 'high') {
+        targetHR = maxHR * 0.85 + Math.random() * 15;
+    } else if (state.currentPhase === 'low') {
+        targetHR = maxHR * 0.65 + Math.random() * 10;
+    } else if (state.currentPhase === 'cooldown') {
+        targetHR = maxHR * 0.55 + Math.random() * 10;
+    } else {
+        targetHR = maxHR * 0.6; // Estado inicial
+    }
+    
+    // Transição suave - FC não muda bruscamente
+    if (state.heartRate === 0) {
+        state.heartRate = Math.floor(targetHR);
+    } else {
+        const diff = targetHR - state.heartRate;
+        state.heartRate += Math.floor(diff * 0.2); // Ajusta 20% por segundo
     }
     
     // Alertas
@@ -502,11 +533,13 @@ function changePhase() {
         state.phaseTimeRemaining = profile.high;
         playSound(900, 300);
         vibrate([300, 100, 300]);
+        speak('Rápido!'); // ← VOZ!
     } else if (state.currentPhase === 'high') {
         state.currentPhase = 'low';
         state.phaseTimeRemaining = profile.low;
         playSound(600, 300);
         vibrate([300]);
+        speak('Normal'); // ← VOZ!
     } else if (state.currentPhase === 'low') {
         state.currentCycle++;
         
@@ -516,17 +549,20 @@ function changePhase() {
             state.cyclesCompleted++;
             playSound(900, 300);
             vibrate([300, 100, 300]);
+            speak('Rápido!'); // ← VOZ!
         } else {
             state.currentPhase = 'cooldown';
             state.phaseTimeRemaining = profile.cooldown;
             state.cyclesCompleted++;
             playSound(600, 400);
             vibrate([400]);
+            speak('Arrefecimento'); // ← VOZ!
         }
     } else if (state.currentPhase === 'cooldown') {
         // Treino completo
         playSound(800, 500);
         vibrate([500, 200, 500]);
+        speak('Treino completo! Parabéns!'); // ← VOZ!
         showNotification('🎉 Treino concluído! Parabéns!');
         stopWorkout();
     }
@@ -555,6 +591,24 @@ function updateDisplay() {
     document.getElementById('calories').textContent = Math.round(state.calories);
     document.getElementById('distance').innerHTML = state.distance.toFixed(2) + '<span class="stat-unit">km</span>';
     document.getElementById('hrValue').textContent = state.heartRate || '--';
+    
+    // Status GPS
+    const gpsStatusEl = document.getElementById('gpsStatus');
+    if (gpsStatusEl) {
+        if (!state.settings.gpsEnabled) {
+            gpsStatusEl.textContent = 'GPS: OFF';
+            gpsStatusEl.style.color = '#ef4444';
+        } else if (gpsPermissionGranted && gpsWatchId) {
+            gpsStatusEl.textContent = 'GPS: ✓';
+            gpsStatusEl.style.color = '#10b981';
+        } else if (gpsPermissionGranted) {
+            gpsStatusEl.textContent = 'GPS: OK';
+            gpsStatusEl.style.color = '#f59e0b';
+        } else {
+            gpsStatusEl.textContent = 'GPS: --';
+            gpsStatusEl.style.color = '#6b7280';
+        }
+    }
     
     // Atualizar classe do display
     const display = document.getElementById('mainDisplay');
@@ -642,17 +696,35 @@ function renderHistory() {
 
 // === GPS ===
 
+let gpsPermissionGranted = false;
+
 function initGPS() {
     if (!state.settings.gpsEnabled || !navigator.geolocation) {
+        console.log('GPS desabilitado ou não disponível');
         return;
     }
     
+    // Solicitar permissão inicial
     navigator.geolocation.getCurrentPosition(
         position => {
             state.lastPosition = position;
+            gpsPermissionGranted = true;
+            console.log('GPS inicializado com sucesso');
+            showNotification('📍 GPS ativado');
         },
         error => {
-            console.log('GPS não disponível:', error);
+            console.log('Erro GPS:', error.message);
+            if (error.code === 1) {
+                showNotification('⚠️ Permita acesso à localização');
+            } else if (error.code === 2) {
+                showNotification('⚠️ GPS indisponível');
+            }
+            gpsPermissionGranted = false;
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
         }
     );
 }
@@ -662,23 +734,37 @@ function startGPS() {
         return;
     }
     
+    if (!gpsPermissionGranted) {
+        initGPS();
+    }
+    
     gpsWatchId = navigator.geolocation.watchPosition(
         position => {
-            if (state.lastPosition) {
+            if (state.lastPosition && state.isRunning) {
+                // Calcular apenas se houver movimento significativo (mais de 5 metros)
                 const distance = calculateDistance(
                     state.lastPosition.coords.latitude,
                     state.lastPosition.coords.longitude,
                     position.coords.latitude,
                     position.coords.longitude
                 );
-                state.distance += distance;
+                
+                // Filtrar leituras com erro (movimentos muito rápidos ou parado)
+                if (distance > 0.005 && distance < 0.1) { // Entre 5m e 100m por leitura
+                    state.distance += distance;
+                    console.log('Distância adicionada:', distance.toFixed(3), 'km');
+                }
             }
             state.lastPosition = position;
         },
         error => {
-            console.log('Erro GPS:', error);
+            console.log('Erro contínuo GPS:', error.message);
         },
-        { enableHighAccuracy: true, maximumAge: 0 }
+        { 
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+        }
     );
 }
 
@@ -686,18 +772,24 @@ function stopGPS() {
     if (gpsWatchId) {
         navigator.geolocation.clearWatch(gpsWatchId);
         gpsWatchId = null;
+        console.log('GPS parado');
     }
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
+    // Fórmula de Haversine - retorna distância em km
     const R = 6371; // Raio da Terra em km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
+    
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon/2) * Math.sin(dLon/2);
+    
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+    const distance = R * c;
+    
+    return distance;
 }
 
 // === CONQUISTAS ===
@@ -771,7 +863,40 @@ function closeAchievements() {
     document.getElementById('achievementsModal').classList.remove('show');
 }
 
-// === SONS E VIBRAÇÃO ===
+// === SONS, VOZ E VIBRAÇÃO ===
+
+// Anunciar fase por voz
+function speak(text) {
+    if (!state.settings.soundEnabled || !state.settings.voiceEnabled) return;
+    
+    if ('speechSynthesis' in window) {
+        // Cancelar qualquer fala anterior
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Tentar usar voz em português
+        const voices = window.speechSynthesis.getVoices();
+        const ptVoice = voices.find(voice => 
+            voice.lang.startsWith('pt') || 
+            voice.lang.startsWith('PT')
+        );
+        
+        if (ptVoice) {
+            utterance.voice = ptVoice;
+        }
+        
+        utterance.lang = 'pt-PT'; // Português de Portugal
+        utterance.rate = 1.0; // Velocidade normal
+        utterance.pitch = 1.0; // Tom normal
+        utterance.volume = 1.0; // Volume máximo
+        
+        window.speechSynthesis.speak(utterance);
+        console.log('Anunciando:', text);
+    } else {
+        console.log('Voz não disponível neste navegador');
+    }
+}
 
 function playSound(frequency = 800, duration = 200) {
     if (!state.settings.soundEnabled) return;
@@ -824,6 +949,43 @@ async function releaseWakeLock() {
 }
 
 // === UTILIDADES ===
+
+function calculateMaxHR() {
+    const age = parseInt(document.getElementById('guideAge').value) || 30;
+    const maxHR = 220 - age;
+    
+    const zones = [
+        { name: 'Zona 1 - Muito Leve', min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#10b981' },
+        { name: 'Zona 2 - Queima Gordura', min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#22c55e' },
+        { name: 'Zona 3 - Aeróbico', min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#3b82f6' },
+        { name: 'Zona 4 - Limiar', min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#f59e0b' },
+        { name: 'Zona 5 - Máximo', min: Math.round(maxHR * 0.90), max: Math.round(maxHR * 1.00), color: '#ef4444' }
+    ];
+    
+    let html = `
+        <div style="text-align: center; font-size: 24px; font-weight: 700; margin-bottom: 20px; color: #ec4899;">
+            Sua FC Máxima: ${maxHR} BPM
+        </div>
+        <div style="font-size: 14px; opacity: 0.8; text-align: center; margin-bottom: 20px;">
+            (Baseado na fórmula: 220 - ${age} anos)
+        </div>
+        <div style="display: grid; gap: 10px;">
+    `;
+    
+    zones.forEach(zone => {
+        html += `
+            <div style="background: rgba(255, 255, 255, 0.1); padding: 12px; border-radius: 8px; 
+                        border-left: 4px solid ${zone.color};">
+                <strong>${zone.name}</strong><br>
+                <span style="font-size: 18px; font-weight: 700;">${zone.min} - ${zone.max} BPM</span>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    
+    document.getElementById('hrResults').innerHTML = html;
+}
 
 function clearAllData() {
     if (confirm('Tem certeza que deseja apagar TODOS os dados? Esta ação não pode ser desfeita.')) {
