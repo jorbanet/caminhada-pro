@@ -23,6 +23,7 @@ let state = {
         motivationalEnabled: true,
         gpsEnabled: true,
         voiceEnabled: true, // ← NOVA CONFIGURAÇÃO!
+        screenTimeout: 1,   // Minutos até desligar ecrã (0 = sempre ligado)
         theme: 'default'
     }
 };
@@ -158,6 +159,12 @@ function loadSettings() {
         if (voiceCheckbox) {
             voiceCheckbox.checked = state.settings.voiceEnabled !== false;
         }
+
+        // Carregar timeout do ecrã
+        const screenTimeoutEl = document.getElementById('screenTimeout');
+        if (screenTimeoutEl) {
+            screenTimeoutEl.value = state.settings.screenTimeout ?? 1;
+        }
         
         if (state.settings.theme === 'dark') {
             document.body.classList.add('dark');
@@ -180,6 +187,12 @@ function saveSettings() {
     const voiceCheckbox = document.getElementById('voiceEnabled');
     if (voiceCheckbox) {
         state.settings.voiceEnabled = voiceCheckbox.checked;
+    }
+
+    // Salvar timeout do ecrã
+    const screenTimeoutEl = document.getElementById('screenTimeout');
+    if (screenTimeoutEl) {
+        state.settings.screenTimeout = parseInt(screenTimeoutEl.value);
     }
     
     localStorage.setItem('cardioSettings', JSON.stringify(state.settings));
@@ -592,24 +605,6 @@ function updateDisplay() {
     document.getElementById('distance').innerHTML = state.distance.toFixed(2) + '<span class="stat-unit">km</span>';
     document.getElementById('hrValue').textContent = state.heartRate || '--';
     
-    // Status GPS
-    const gpsStatusEl = document.getElementById('gpsStatus');
-    if (gpsStatusEl) {
-        if (!state.settings.gpsEnabled) {
-            gpsStatusEl.textContent = 'GPS: OFF';
-            gpsStatusEl.style.color = '#ef4444';
-        } else if (gpsPermissionGranted && gpsWatchId) {
-            gpsStatusEl.textContent = 'GPS: ✓';
-            gpsStatusEl.style.color = '#10b981';
-        } else if (gpsPermissionGranted) {
-            gpsStatusEl.textContent = 'GPS: OK';
-            gpsStatusEl.style.color = '#f59e0b';
-        } else {
-            gpsStatusEl.textContent = 'GPS: --';
-            gpsStatusEl.style.color = '#6b7280';
-        }
-    }
-    
     // Atualizar classe do display
     const display = document.getElementById('mainDisplay');
     display.className = 'main-display ' + (state.currentPhase || '');
@@ -699,71 +694,107 @@ function renderHistory() {
 let gpsPermissionGranted = false;
 
 function initGPS() {
-    if (!state.settings.gpsEnabled || !navigator.geolocation) {
-        console.log('GPS desabilitado ou não disponível');
+    if (!navigator.geolocation) {
+        showNotification('⚠️ GPS não disponível neste dispositivo');
         return;
     }
-    
-    // Solicitar permissão inicial
+    if (!state.settings.gpsEnabled) return;
+
+    // Pedir permissão e posição inicial
     navigator.geolocation.getCurrentPosition(
         position => {
-            state.lastPosition = position;
             gpsPermissionGranted = true;
-            console.log('GPS inicializado com sucesso');
-            showNotification('📍 GPS ativado');
+            state.lastPosition = position;
+            updateGpsStatus('ok');
+            showNotification('📍 GPS pronto!');
         },
         error => {
-            console.log('Erro GPS:', error.message);
-            if (error.code === 1) {
-                showNotification('⚠️ Permita acesso à localização');
-            } else if (error.code === 2) {
-                showNotification('⚠️ GPS indisponível');
-            }
             gpsPermissionGranted = false;
+            updateGpsStatus('error');
+            if (error.code === 1) {
+                showNotification('⚠️ Permita acesso à localização nas definições');
+            } else if (error.code === 2) {
+                showNotification('⚠️ Sinal GPS fraco - vá para exterior');
+            } else {
+                showNotification('⚠️ GPS timeout - tente novamente');
+            }
         },
         {
             enableHighAccuracy: true,
-            timeout: 10000,
+            timeout: 15000,
             maximumAge: 0
         }
     );
 }
 
 function startGPS() {
-    if (!state.settings.gpsEnabled || !navigator.geolocation) {
-        return;
-    }
-    
+    if (!state.settings.gpsEnabled || !navigator.geolocation) return;
+
+    // Se ainda não tem permissão, pedir primeiro e depois iniciar
     if (!gpsPermissionGranted) {
-        initGPS();
+        navigator.geolocation.getCurrentPosition(
+            position => {
+                gpsPermissionGranted = true;
+                state.lastPosition = position;
+                updateGpsStatus('active');
+                iniciarWatch();
+            },
+            error => {
+                gpsPermissionGranted = false;
+                updateGpsStatus('error');
+                showNotification('⚠️ GPS sem permissão - distância não será registada');
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+    } else {
+        iniciarWatch();
     }
-    
+}
+
+function iniciarWatch() {
+    // Parar watch anterior se existir
+    if (gpsWatchId) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = null;
+    }
+
     gpsWatchId = navigator.geolocation.watchPosition(
         position => {
+            const accuracy = position.coords.accuracy; // Precisão em metros
+
             if (state.lastPosition && state.isRunning) {
-                // Calcular apenas se houver movimento significativo (mais de 5 metros)
                 const distance = calculateDistance(
                     state.lastPosition.coords.latitude,
                     state.lastPosition.coords.longitude,
                     position.coords.latitude,
                     position.coords.longitude
                 );
-                
-                // Filtrar leituras com erro (movimentos muito rápidos ou parado)
-                if (distance > 0.005 && distance < 0.1) { // Entre 5m e 100m por leitura
+
+                // Filtro mais permissivo:
+                // - Mínimo: 1 metro (0.001 km) para contar
+                // - Máximo: 200 metros (0.2 km) por leitura (evita saltos GPS)
+                // - Só conta se precisão melhor que 50 metros
+                if (distance > 0.001 && distance < 0.2 && accuracy < 50) {
                     state.distance += distance;
-                    console.log('Distância adicionada:', distance.toFixed(3), 'km');
                 }
             }
+
             state.lastPosition = position;
+            updateGpsStatus('active');
         },
         error => {
-            console.log('Erro contínuo GPS:', error.message);
+            updateGpsStatus('error');
+            // Tentar reiniciar após erro
+            if (error.code === 3) { // Timeout
+                setTimeout(() => {
+                    if (state.isRunning) iniciarWatch();
+                }, 3000);
+            }
         },
-        { 
+        {
             enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0
+            timeout: 30000,   // 30 segundos timeout (mais generoso)
+            maximumAge: 1000  // Aceitar posição com até 1 segundo de idade
         }
     );
 }
@@ -772,24 +803,43 @@ function stopGPS() {
     if (gpsWatchId) {
         navigator.geolocation.clearWatch(gpsWatchId);
         gpsWatchId = null;
-        console.log('GPS parado');
+    }
+    updateGpsStatus('idle');
+}
+
+function updateGpsStatus(status) {
+    const el = document.getElementById('gpsStatus');
+    if (!el) return;
+
+    if (!state.settings.gpsEnabled) {
+        el.textContent = 'GPS: OFF';
+        el.style.color = '#ef4444';
+    } else if (status === 'active') {
+        el.textContent = 'GPS: ✓';
+        el.style.color = '#10b981';
+    } else if (status === 'ok') {
+        el.textContent = 'GPS: OK';
+        el.style.color = '#f59e0b';
+    } else if (status === 'error') {
+        el.textContent = 'GPS: ✗';
+        el.style.color = '#ef4444';
+    } else {
+        el.textContent = 'GPS: --';
+        el.style.color = '#6b7280';
     }
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
     // Fórmula de Haversine - retorna distância em km
-    const R = 6371; // Raio da Terra em km
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-    
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distance = R * c;
-    
-    return distance;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 }
 
 // === CONQUISTAS ===
@@ -929,21 +979,68 @@ function vibrate(pattern = [200]) {
     }
 }
 
-// === WAKE LOCK ===
+// === WAKE LOCK & ECRÃ ===
+
+let screenOffTimer = null;
 
 async function requestWakeLock() {
-    try {
-        if ('wakeLock' in navigator) {
-            wakeLock = await navigator.wakeLock.request('screen');
+    // Cancelar timer anterior se existir
+    if (screenOffTimer) {
+        clearTimeout(screenOffTimer);
+        screenOffTimer = null;
+    }
+
+    const screenTimeout = state.settings.screenTimeout; // minutos (0 = sempre ligado)
+
+    if (screenTimeout === 0) {
+        // Manter ecrã sempre ligado
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLock = await navigator.wakeLock.request('screen');
+            }
+        } catch (err) {
+            console.log('Wake Lock não disponível');
         }
-    } catch (err) {
-        console.log('Wake Lock não disponível');
+    } else {
+        // Manter ligado X minutos depois desliga
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLock = await navigator.wakeLock.request('screen');
+            }
+        } catch (err) {
+            console.log('Wake Lock não disponível');
+        }
+
+        // Agendar desligar ecrã após timeout configurado
+        screenOffTimer = setTimeout(async () => {
+            await releaseWakeLock();
+            showNotification(`📱 Ecrã desligado - treino continua em segundo plano`);
+        }, screenTimeout * 60 * 1000);
     }
 }
 
+// Reativar ecrã quando o utilizador tocar
+document.addEventListener('touchstart', async () => {
+    if (state.isRunning && !wakeLock) {
+        await requestWakeLock();
+    }
+}, { passive: true });
+
+document.addEventListener('click', async () => {
+    if (state.isRunning && !wakeLock) {
+        await requestWakeLock();
+    }
+});
+
 async function releaseWakeLock() {
+    if (screenOffTimer) {
+        clearTimeout(screenOffTimer);
+        screenOffTimer = null;
+    }
     if (wakeLock !== null) {
-        await wakeLock.release();
+        try {
+            await wakeLock.release();
+        } catch (e) {}
         wakeLock = null;
     }
 }
