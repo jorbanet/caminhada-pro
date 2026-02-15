@@ -1122,4 +1122,20 @@
             </div>
             <div class="setting-item">
                 <label class="setting-label">Número de Ciclos</label>
-                <input type="number" id="customCycles" value="8" min="1" max="2
+                <input type="number" id="customCycles" value="8" min="1" max="20">
+            </div>
+            <div class="setting-item">
+                <label class="setting-label">Arrefecimento (min)</label>
+                <input type="number" id="customCooldown" value="2" min="0" max="10">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-success" onclick="saveCustomProfile()">Salvar</button>
+                <button class="btn btn-danger" onclick="closeCustomProfile()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+    <script src="charts.js"></script>
+</body>
+</html>
