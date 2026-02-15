@@ -414,20 +414,13 @@ function startWorkout() {
     document.getElementById('startBtn').disabled = true;
     document.getElementById('pauseBtn').disabled = false;
     document.getElementById('stopBtn').disabled = false;
-    
+
     updateDisplay();
-    playSound(600, 200);
+    playSoundPhase('warmup'); // Som de aquecimento
     vibrate([200]);
-    
-    // Anunciar início
-    if (state.currentPhase === 'warmup') {
-        speak('Aquecimento'); // ← VOZ no início!
-    }
-    
-    if (state.settings.gpsEnabled) {
-        startGPS();
-    }
-    
+    speak('Aquecimento');
+
+    if (state.settings.gpsEnabled) startGPS();
     requestWakeLock();
     intervalId = setInterval(tick, 1000);
 }
@@ -518,9 +511,9 @@ function tick() {
         state.heartRate += Math.floor(diff * 0.2); // Ajusta 20% por segundo
     }
     
-    // Alertas
+    // Alertas contagem regressiva (últimos 3 segundos)
     if (state.phaseTimeRemaining === 3 || state.phaseTimeRemaining === 2 || state.phaseTimeRemaining === 1) {
-        playSound(700, 100);
+        playSoundPhase('countdown');
         vibrate([100]);
     }
     
@@ -544,38 +537,40 @@ function changePhase() {
     if (state.currentPhase === 'warmup') {
         state.currentPhase = 'high';
         state.phaseTimeRemaining = profile.high;
-        playSound(900, 300);
+        playSoundPhase('high');   // ⬆️⬆️ 2 bips agudos
         vibrate([300, 100, 300]);
-        speak('Rápido!'); // ← VOZ!
+        speak('Rápido!');
+
     } else if (state.currentPhase === 'high') {
         state.currentPhase = 'low';
         state.phaseTimeRemaining = profile.low;
-        playSound(600, 300);
+        playSoundPhase('low');    // ⬇️⬇️ 2 bips graves
         vibrate([300]);
-        speak('Normal'); // ← VOZ!
+        speak('Normal');
+
     } else if (state.currentPhase === 'low') {
         state.currentCycle++;
-        
+
         if (state.currentCycle < profile.cycles) {
             state.currentPhase = 'high';
             state.phaseTimeRemaining = profile.high;
             state.cyclesCompleted++;
-            playSound(900, 300);
+            playSoundPhase('high'); // ⬆️⬆️ 2 bips agudos
             vibrate([300, 100, 300]);
-            speak('Rápido!'); // ← VOZ!
+            speak('Rápido!');
         } else {
             state.currentPhase = 'cooldown';
             state.phaseTimeRemaining = profile.cooldown;
             state.cyclesCompleted++;
-            playSound(600, 400);
+            playSoundPhase('cooldown'); // ⬇️⬇️⬇️ 3 bips descentes
             vibrate([400]);
-            speak('Arrefecimento'); // ← VOZ!
+            speak('Arrefecimento');
         }
+
     } else if (state.currentPhase === 'cooldown') {
-        // Treino completo
-        playSound(800, 500);
+        playSoundPhase('complete'); // 🎉 4 bips ascendentes
         vibrate([500, 200, 500]);
-        speak('Treino completo! Parabéns!'); // ← VOZ!
+        speak('Treino completo! Parabéns!');
         showNotification('🎉 Treino concluído! Parabéns!');
         stopWorkout();
     }
@@ -915,59 +910,138 @@ function closeAchievements() {
 
 // === SONS, VOZ E VIBRAÇÃO ===
 
-// Anunciar fase por voz
+// AudioContext partilhado para funcionar em segundo plano
+let sharedAudioContext = null;
+
+function getAudioContext() {
+    if (!sharedAudioContext || sharedAudioContext.state === 'closed') {
+        sharedAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // Retomar se suspenso
+    if (sharedAudioContext.state === 'suspended') {
+        sharedAudioContext.resume();
+    }
+    return sharedAudioContext;
+}
+
+// Sons distintos por fase - funcionam em segundo plano
+function playSoundPhase(phase) {
+    if (!state.settings.soundEnabled) return;
+
+    const ctx = getAudioContext();
+
+    const sounds = {
+        // Alta intensidade: 2 bips agudos rápidos ⬆️⬆️
+        high: [
+            { freq: 1000, start: 0,    dur: 0.15 },
+            { freq: 1200, start: 0.2,  dur: 0.15 }
+        ],
+        // Baixa intensidade: 2 bips graves lentos ⬇️⬇️
+        low: [
+            { freq: 600,  start: 0,    dur: 0.2  },
+            { freq: 500,  start: 0.25, dur: 0.2  }
+        ],
+        // Aquecimento: 1 bip médio suave
+        warmup: [
+            { freq: 700,  start: 0,    dur: 0.3  }
+        ],
+        // Arrefecimento: 3 bips descentes ⬇️⬇️⬇️
+        cooldown: [
+            { freq: 800,  start: 0,    dur: 0.15 },
+            { freq: 650,  start: 0.2,  dur: 0.15 },
+            { freq: 500,  start: 0.4,  dur: 0.2  }
+        ],
+        // Fim do treino: 4 bips ascendentes 🎉
+        complete: [
+            { freq: 600,  start: 0,    dur: 0.15 },
+            { freq: 750,  start: 0.2,  dur: 0.15 },
+            { freq: 900,  start: 0.4,  dur: 0.15 },
+            { freq: 1100, start: 0.6,  dur: 0.3  }
+        ],
+        // Contagem regressiva: bip curto neutro
+        countdown: [
+            { freq: 750,  start: 0,    dur: 0.1  }
+        ]
+    };
+
+    const pattern = sounds[phase] || sounds.countdown;
+
+    pattern.forEach(({ freq, start, dur }) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+
+        const t = ctx.currentTime + start;
+        gain.gain.setValueAtTime(0.35, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+        osc.start(t);
+        osc.stop(t + dur + 0.05);
+    });
+}
+
+// Voz - só funciona com ecrã ligado
+// Quando ecrã desligado, os sons distintos substituem a voz
 function speak(text) {
     if (!state.settings.soundEnabled || !state.settings.voiceEnabled) return;
-    
-    if ('speechSynthesis' in window) {
-        // Cancelar qualquer fala anterior
-        window.speechSynthesis.cancel();
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        // Tentar usar voz em português
-        const voices = window.speechSynthesis.getVoices();
-        const ptVoice = voices.find(voice => 
-            voice.lang.startsWith('pt') || 
-            voice.lang.startsWith('PT')
-        );
-        
-        if (ptVoice) {
-            utterance.voice = ptVoice;
-        }
-        
-        utterance.lang = 'pt-PT'; // Português de Portugal
-        utterance.rate = 1.0; // Velocidade normal
-        utterance.pitch = 1.0; // Tom normal
-        utterance.volume = 1.0; // Volume máximo
-        
-        window.speechSynthesis.speak(utterance);
-        console.log('Anunciando:', text);
-    } else {
-        console.log('Voz não disponível neste navegador');
+
+    // Verificar se documento está visível (ecrã ligado)
+    if (document.visibilityState !== 'visible') {
+        // Ecrã apagado - voz não funciona, sons já tratam disso
+        return;
     }
+
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+
+        // Aguardar vozes carregarem (necessário em alguns browsers)
+        const voices = window.speechSynthesis.getVoices();
+        const ptVoice = voices.find(v =>
+            v.lang.startsWith('pt') || v.lang.startsWith('PT')
+        );
+
+        if (ptVoice) utterance.voice = ptVoice;
+
+        utterance.lang   = 'pt-PT';
+        utterance.rate   = 1.0;
+        utterance.pitch  = 1.0;
+        utterance.volume = 1.0;
+
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+// Garantir que vozes estão carregadas
+if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+    };
 }
 
 function playSound(frequency = 800, duration = 200) {
     if (!state.settings.soundEnabled) return;
-    
     try {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.frequency.value = frequency;
-        oscillator.type = 'sine';
-        
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + duration / 1000);
+        const ctx  = getAudioContext();
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = frequency;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration / 1000);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + duration / 1000 + 0.05);
     } catch (e) {
+        console.log('Som não disponível');
+    }
+}
         console.log('Som não disponível');
     }
 }
@@ -1049,66 +1123,4 @@ async function releaseWakeLock() {
 
 function calculateMaxHR() {
     const age = parseInt(document.getElementById('guideAge').value) || 30;
-    const maxHR = 220 - age;
-    
-    const zones = [
-        { name: 'Zona 1 - Muito Leve', min: Math.round(maxHR * 0.50), max: Math.round(maxHR * 0.60), color: '#10b981' },
-        { name: 'Zona 2 - Queima Gordura', min: Math.round(maxHR * 0.60), max: Math.round(maxHR * 0.70), color: '#22c55e' },
-        { name: 'Zona 3 - Aeróbico', min: Math.round(maxHR * 0.70), max: Math.round(maxHR * 0.80), color: '#3b82f6' },
-        { name: 'Zona 4 - Limiar', min: Math.round(maxHR * 0.80), max: Math.round(maxHR * 0.90), color: '#f59e0b' },
-        { name: 'Zona 5 - Máximo', min: Math.round(maxHR * 0.90), max: Math.round(maxHR * 1.00), color: '#ef4444' }
-    ];
-    
-    let html = `
-        <div style="text-align: center; font-size: 24px; font-weight: 700; margin-bottom: 20px; color: #ec4899;">
-            Sua FC Máxima: ${maxHR} BPM
-        </div>
-        <div style="font-size: 14px; opacity: 0.8; text-align: center; margin-bottom: 20px;">
-            (Baseado na fórmula: 220 - ${age} anos)
-        </div>
-        <div style="display: grid; gap: 10px;">
-    `;
-    
-    zones.forEach(zone => {
-        html += `
-            <div style="background: rgba(255, 255, 255, 0.1); padding: 12px; border-radius: 8px; 
-                        border-left: 4px solid ${zone.color};">
-                <strong>${zone.name}</strong><br>
-                <span style="font-size: 18px; font-weight: 700;">${zone.min} - ${zone.max} BPM</span>
-            </div>
-        `;
-    });
-    
-    html += '</div>';
-    
-    document.getElementById('hrResults').innerHTML = html;
-}
-
-function clearAllData() {
-    if (confirm('Tem certeza que deseja apagar TODOS os dados? Esta ação não pode ser desfeita.')) {
-        localStorage.clear();
-        showNotification('✅ Todos os dados foram apagados');
-        setTimeout(() => location.reload(), 1500);
-    }
-}
-
-// Service Worker
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-}
-
-// Prevenir zoom
-document.addEventListener('touchmove', function (event) {
-    if (event.scale !== 1) {
-        event.preventDefault();
-    }
-}, { passive: false });
-
-let lastTouchEnd = 0;
-document.addEventListener('touchend', function (event) {
-    const now = (new Date()).getTime();
-    if (now - lastTouchEnd <= 300) {
-        event.preventDefault();
-    }
-    lastTouchEnd = now;
-}, false);
+    c
