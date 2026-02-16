@@ -362,4 +362,4 @@ Problemas ou sugestões?
 
 **Desenvolvido para atletas que buscam resultados reais! 💪❤️🔥**
 
-*Versão 3.0.0 - Cardio Interval Pro*
+*Versão 3.4.0 - Cardio Interval Pro by jorban*
